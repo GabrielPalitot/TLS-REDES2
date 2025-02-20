@@ -27,7 +27,7 @@ def handle_client(conn, addr):
                      algorithm=hashes.SHA256(),
                      label=None)
     )
-    
+    print(f"[SERVIDOR] Chave AES recebida: {aes_key.decode()}")
     cipher = Fernet(aes_key)
     client_keys[addr] = cipher
     
