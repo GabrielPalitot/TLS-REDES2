@@ -15,8 +15,11 @@ public_pem = public_key.public_bytes(encoding=serialization.Encoding.PEM,
 
 client_keys = {}
 
+client_connections = []
+
 def handle_client(conn, addr):
     print(f"[+] Cliente {addr} conectado.")
+    client_connections.append(conn)
     
     conn.send(public_pem)
     
@@ -47,15 +50,39 @@ def handle_client(conn, addr):
                 continue
             
             print(f"({addr}) {message}")
+            
+            # Criar nova mensagem autenticada para cada cliente
+            for client_conn in client_connections:
+                if client_conn != conn:
+                    try:
+                        client_addr = client_conn.getpeername()
+                        client_cipher = client_keys[client_addr]
+                        
+                        # Criar novo nonce e MAC para cada cliente
+                        new_nonce = str(uuid.uuid4())
+                        new_mac = hmac.new(
+                            client_cipher._signing_key, 
+                            f"{new_nonce}|{message}".encode(), 
+                            hashlib.sha256
+                        ).hexdigest()
+                        
+                        # Montar nova mensagem autenticada
+                        new_message = f"{new_nonce}|{new_mac}|{message}"
+                        encrypted_message = client_cipher.encrypt(new_message.encode())
+                        client_conn.send(encrypted_message)
+                    except Exception as e:
+                        print(f"Erro ao enviar para cliente {client_addr}: {e}")
+                    
         except Exception as e:
             print(f"[!] Erro ao processar mensagem: {e}")
             break
     
     conn.close()
+    client_connections.remove(conn)
     print(f"[-] Cliente {addr} desconectado.")
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(("0.0.0.0", 9000))
+server.bind(("localhost", 9000))
 server.listen(5)
 
 print("Servidor aguardando conexões...")
