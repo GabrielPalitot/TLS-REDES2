@@ -46,7 +46,6 @@ def receive_messages():
             
             nonce, mac, content = message.split("|")
             
-            # Verificar MAC usando a chave do cliente
             computed_mac = hmac.new(
                 cipher._signing_key,
                 f"{nonce}|{content}".encode(),
@@ -54,13 +53,18 @@ def receive_messages():
             ).hexdigest()
             
             if hmac.compare_digest(mac, computed_mac):
-                print(f"\nMensagem recebida: {content}")
+                print(f"\n[✓] Mensagem autenticada: {content}")
                 print("Digite: ", end='', flush=True)
             else:
-                print("\nMensagem não autenticada")
+                print("\n[❌] ALERTA: Mensagem não autenticada detectada!")
+                print(f"[❌] Conteúdo suspeito: {content}")
+                # Notificar servidor sobre tentativa de adulteração
+                alert_message = f"ALERT|{nonce}|Mensagem não autenticada detectada"
+                encrypted_alert = cipher.encrypt(alert_message.encode())
+                client.send(encrypted_alert)
                 print("Digite: ", end='', flush=True)
         except Exception as e:
-            print(f"\nErro ao receber mensagem: {e}")
+            print(f"\n[!] Erro ao receber mensagem: {e}")
 
 threading.Thread(target=send_message).start()
 threading.Thread(target=receive_messages).start()
