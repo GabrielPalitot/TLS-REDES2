@@ -42,11 +42,55 @@ def handle_client(conn, addr):
             
             decrypted_message = cipher.decrypt(encrypted_data).decode()
             
+            # Verificar se é uma mensagem de alerta
+            if decrypted_message.startswith("ALERT|"):
+                print(f"[!] Alerta recebido de {addr}: {decrypted_message}")
+                # Repassar alerta para todos os outros clientes
+                alert_message = f"SISTEMA: Tentativa de adulteração detectada!"
+                for client_conn in client_connections:
+                    if client_conn != conn:
+                        try:
+                            client_addr = client_conn.getpeername()
+                            client_cipher = client_keys[client_addr]
+                            
+                            new_nonce = str(uuid.uuid4())
+                            new_mac = hmac.new(
+                                client_cipher._signing_key,
+                                f"{new_nonce}|{alert_message}".encode(),
+                                hashlib.sha256
+                            ).hexdigest()
+                            
+                            new_message = f"{new_nonce}|{new_mac}|{alert_message}"
+                            encrypted_alert = client_cipher.encrypt(new_message.encode())
+                            client_conn.send(encrypted_alert)
+                        except Exception as e:
+                            print(f"Erro ao enviar alerta para cliente {client_addr}: {e}")
+                continue
+            
             nonce, mac, message = decrypted_message.split("|")
             
             computed_mac = hmac.new(aes_key, f"{nonce}|{message}".encode(), hashlib.sha256).hexdigest()
             if computed_mac != mac:
                 print(f"[ALERTA] Mensagem alterada em trânsito! {addr}")
+                # Notificar todos os clientes sobre a tentativa de adulteração
+                alert_message = f"SISTEMA: Tentativa de adulteração detectada!"
+                for client_conn in client_connections:
+                    try:
+                        client_addr = client_conn.getpeername()
+                        client_cipher = client_keys[client_addr]
+                        
+                        new_nonce = str(uuid.uuid4())
+                        new_mac = hmac.new(
+                            client_cipher._signing_key,
+                            f"{new_nonce}|{alert_message}".encode(),
+                            hashlib.sha256
+                        ).hexdigest()
+                        
+                        new_message = f"{new_nonce}|{new_mac}|{alert_message}"
+                        encrypted_alert = client_cipher.encrypt(new_message.encode())
+                        client_conn.send(encrypted_alert)
+                    except Exception as e:
+                        print(f"Erro ao enviar alerta para cliente {client_addr}: {e}")
                 continue
             
             print(f"({addr}) {message}")
